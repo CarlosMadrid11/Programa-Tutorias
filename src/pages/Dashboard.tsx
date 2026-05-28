@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../utils/supabase'
+import RefreshButton from '../components/RefreshButton'
 
 const rolLabels: Record<string, string> = {
   coordinador_institucional: 'Coordinador Institucional',
@@ -32,12 +33,12 @@ const bookIcon = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" str
 const checkIcon = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 
 export default function Dashboard() {
-  const { perfil, rol, session } = useAuth()
+  const { perfil, rol, session, refreshPerfil } = useAuth()
   const [stats, setStats]     = useState<Stat[]>([])
   const [alertas, setAlertas] = useState<number>(0)
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    async function loadStats() {
+  const loadStats = useCallback(async () => {
       if (!rol) return
       const s: Stat[] = []
       if (['coordinador_institucional', 'jefe_desarrollo_academico'].includes(rol)) {
@@ -77,9 +78,15 @@ export default function Dashboard() {
         )
       }
       setStats(s)
-    }
-    loadStats()
   }, [rol, perfil])
+
+  useEffect(() => { void loadStats() }, [loadStats])
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    await Promise.all([refreshPerfil(), loadStats()])
+    setRefreshing(false)
+  }
 
   const firstName = perfil?.nombre_completo?.split(' ')[0] ?? 'Usuario'
   const theme = rolTheme[rol ?? ''] ?? rolTheme['tutorado']
@@ -206,7 +213,10 @@ export default function Dashboard() {
         {/* Alerta de perfil no encontrado */}
         {!perfil && (
           <div style={{ padding:'1.1rem 1.25rem', background:'#fee2e2', border:'1px solid #ef4444', borderRadius:'14px', marginBottom:'1.25rem', color:'#991b1b', lineHeight:'1.5' }}>
-            <strong style={{ display:'block', marginBottom:'0.4rem' }}>⚠️ Perfil no encontrado</strong>
+            <strong style={{ display:'flex', alignItems:'center', gap:'0.4rem', marginBottom:'0.4rem' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Perfil no encontrado
+            </strong>
             <p style={{ margin:'0 0 0.4rem', fontSize:'0.88rem' }}>No se encontraron datos en la base de datos para esta cuenta.</p>
             <ul style={{ margin:0, paddingLeft:'1.4rem', fontSize:'0.85rem' }}>
               <li><strong>Email:</strong> <code>{session?.user?.email}</code></li>
@@ -225,9 +235,12 @@ export default function Dashboard() {
 
         {/* Hero */}
         <div className="dash-hero">
+          <div style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 2 }}>
+            <RefreshButton onClick={handleRefresh} loading={refreshing} />
+          </div>
           <div className="dash-hero-inner">
             <p className="dash-greeting">{greeting}</p>
-            <h1>{firstName} 👋</h1>
+            <h1>{firstName}</h1>
             <p className="dash-hero-sub">Sistema de Gestión del Programa de Tutorías</p>
             <div className="dash-role-pill">
               {theme.gold && (

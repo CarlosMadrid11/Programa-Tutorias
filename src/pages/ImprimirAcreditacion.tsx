@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useToast } from '../context/ToastContext'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../utils/supabase'
+import RefreshButton from '../components/RefreshButton'
 
 interface TutoradoAcred {
   id: string
@@ -25,6 +26,8 @@ export default function ImprimirAcreditacion() {
   const [generando, setGenerando] = useState<string|null>(null)
   const [periodoId, setPeriodoId] = useState('')
   const [periodoNombre, setPeriodoNombre] = useState('')
+  const [refreshTick, setRefreshTick] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     if (!perfil || !rol) return
@@ -76,7 +79,7 @@ export default function ImprimirAcreditacion() {
       })
       setTutorados(rows); setLoading(false)
     })
-  }, [perfil, rol])
+  }, [perfil, rol, refreshTick])
 
   async function generarAcreditacion(t: TutoradoAcred) {
     if (!perfil) return
@@ -152,9 +155,12 @@ export default function ImprimirAcreditacion() {
         .empty-state{padding:2.5rem;text-align:center;color:#94a3b8;font-size:0.9rem}
       `}</style>
 
-      <div style={{ marginBottom:'1.25rem' }}>
-        <h1 className="page-title">Imprimir Acreditación</h1>
-        <p className="page-sub">Generación de constancias oficiales para tutorados que acreditaron</p>
+      <div style={{ marginBottom:'1.25rem', display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'0.75rem' }}>
+        <div>
+          <h1 className="page-title">Imprimir Acreditación</h1>
+          <p className="page-sub">Generación de constancias oficiales para tutorados que acreditaron</p>
+        </div>
+        <RefreshButton onClick={() => { setRefreshing(true); setRefreshTick((t) => t + 1); setTimeout(() => setRefreshing(false), 500) }} loading={refreshing} />
       </div>
 
       {loading ? <div className="empty-state">Cargando datos…</div> : (

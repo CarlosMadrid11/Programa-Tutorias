@@ -16,6 +16,8 @@ import SubirEvidencias       from './pages/SubirEvidencias'
 import ImprimirAcreditacion  from './pages/ImprimirAcreditacion'
 import ConsultarTutores      from './pages/ConsultarTutores'
 import ConsultarTutorados    from './pages/ConsultarTutorados'
+import GestionarTutorados    from './pages/GestionarTutorados'
+import FechasGrupo           from './pages/FechasGrupo'
 
 function AuthCheckingScreen() {
   return (
@@ -77,6 +79,8 @@ export const router = createBrowserRouter([
       { path: '/registrar-actividades',  element: <RegistrarActividades /> },
       { path: '/asignar-tutor',          element: <AsignarTutor /> },
       { path: '/asignar-tutorado',       element: <AsignarTutorado /> },
+      { path: '/gestionar-tutorados',    element: <GestionarTutorados /> },
+      { path: '/fechas-grupo',           element: <FechasGrupo /> },
       { path: '/capturar-asistencia',    element: <CapturarAsistencia /> },
       { path: '/evaluar-evidencias',     element: <EvaluarEvidencias /> },
       { path: '/evaluar-desempeno',      element: <EvaluarDesempeno /> },

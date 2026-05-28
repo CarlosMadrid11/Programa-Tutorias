@@ -29,6 +29,7 @@ export interface Perfil {
   carrera?: string | null
   estado: EstadoRegistro
   primer_acceso: boolean
+  password_temporal?: string | null
   creado_por?: string | null
   creado_en: string
   actualizado_en: string
