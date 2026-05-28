@@ -1,15 +1,12 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'   // ← viene del archivo separado ahora
+import { useAuth } from '../context/AuthContext'
 
-// ─── Tipos ───────────────────────────────────────────────────────────────────
 interface NavItem {
   label: string
   route: string
   icon: React.ReactNode
 }
 
-// ─── Configuración de roles ───────────────────────────────────────────────────
-// Los valores de 'rol' vienen exactamente como están en la tabla 'sistema'
 const roleConfig: Record<string, { label: string; colorBg: string; colorText: string; colorBorder: string }> = {
   tutor: {
     label: 'Tutor',
@@ -61,7 +58,6 @@ const roleConfig: Record<string, { label: string; colorBg: string; colorText: st
   },
 }
 
-// ─── Íconos SVG ───────────────────────────────────────────────────────────────
 const icons = {
   asistencia: (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -128,6 +124,12 @@ const icons = {
       <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>
     </svg>
   ),
+  dashboard: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+      <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+    </svg>
+  ),
   logout: (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
@@ -135,7 +137,6 @@ const icons = {
   ),
 }
 
-// ─── Menús por rol ────────────────────────────────────────────────────────────
 const navItemsByRole: Record<string, NavItem[]> = {
   tutor: [
     { label: 'Capturar asistencia', route: '/capturar-asistencia', icon: icons.asistencia },
@@ -173,130 +174,278 @@ const navItemsByRole: Record<string, NavItem[]> = {
   ],
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
 interface SidebarProps {
   isOpen: boolean
   onClose: () => void
 }
 
-// ─── Componente ───────────────────────────────────────────────────────────────
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const { user, logout } = useAuth()
+  const { perfil, rol, signOut } = useAuth()
   const navigate = useNavigate()
 
-  const rol      = user?.rol ?? ''
-  const config   = roleConfig[rol] ?? roleConfig['director']
-  const navItems = navItemsByRole[rol] ?? []
+  const roleKey = rol as keyof typeof roleConfig | null
+  const config = roleKey ? roleConfig[roleKey] : null
+  const navItems = roleKey ? (navItemsByRole[roleKey] ?? []) : []
 
   const handleLogout = async () => {
-    await logout()
+    await signOut()
+    onClose()
     navigate('/login')
   }
 
   if (!isOpen) return null
 
+  // Ensure config colors are accessible for CSS variables
+  const activeBg = config?.colorBg ?? '#eff6ff'
+  const activeText = config?.colorText ?? '#1e3a8a'
+  const activeBorder = config?.colorBorder ?? '#bfdbfe'
+
   return (
     <>
-      {/* Overlay */}
+      <style>{`
+        .sidebar-premium {
+          backdrop-filter: blur(12px);
+          background: linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(248,251,255,0.97) 100%);
+        }
+        .nav-link-premium {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 14px;
+          border-radius: 12px;
+          margin-bottom: 6px;
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 600;
+          color: #475569;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          position: relative;
+          overflow: hidden;
+          border: 1px solid transparent;
+        }
+        .nav-link-premium:hover {
+          background: #f1f5f9;
+          color: #0f172a;
+          transform: translateX(4px);
+        }
+        .nav-link-premium.active {
+          color: var(--active-text);
+          background: linear-gradient(90deg, var(--active-bg) 0%, rgba(255,255,255,0) 100%);
+          border: 1px solid var(--active-border);
+          box-shadow: 0 4px 14px var(--active-shadow);
+          font-weight: 700;
+        }
+        .nav-link-premium.active::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          width: 4px;
+          background: var(--active-text);
+          border-radius: 0 4px 4px 0;
+        }
+        .nav-icon {
+          flex-shrink: 0;
+          display: inline-flex;
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .nav-link-premium:hover .nav-icon {
+          transform: scale(1.15) rotate(-4deg);
+        }
+        .nav-link-premium.active .nav-icon {
+          transform: scale(1.1);
+        }
+        .role-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+          font-weight: 700;
+          padding: 6px 14px;
+          border-radius: 20px;
+          letter-spacing: 0.02em;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .role-badge:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+        }
+        .pulse-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: currentColor;
+          animation: pulse 2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(0,0,0, 0.2); }
+          70% { box-shadow: 0 0 0 6px rgba(0,0,0, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(0,0,0, 0); }
+        }
+        .logout-btn {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          padding: 14px 18px;
+          border: 1px solid #fecaca;
+          border-radius: 12px;
+          background: linear-gradient(180deg, #fff5f5 0%, #fee2e2 100%);
+          cursor: pointer;
+          color: #dc2626;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 2px 4px rgba(220, 38, 38, 0.05);
+        }
+        .logout-btn:hover {
+          background: linear-gradient(180deg, #fee2e2 0%, #fca5a5 100%);
+          color: #b91c1c;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 16px rgba(220, 38, 38, 0.15);
+        }
+      `}</style>
+
       <div
         onClick={onClose}
         style={{
           position: 'fixed',
           inset: 0,
-          backgroundColor: 'rgba(0,0,0,0.25)',
-          backdropFilter: 'blur(2px)',
-          zIndex: 30,
+          backgroundColor: 'rgba(15, 23, 42, 0.5)',
+          backdropFilter: 'blur(8px)',
+          zIndex: 60,
+          opacity: 1,
+          transition: 'opacity 0.3s ease',
         }}
       />
 
-      {/* Panel lateral */}
       <aside
+        className="sidebar-premium"
         style={{
           position: 'fixed',
           top: 0,
           left: 0,
           height: '100%',
-          width: '272px',
-          backgroundColor: '#ffffff',
-          zIndex: 40,
+          width: '320px',
+          maxWidth: '92vw',
+          zIndex: 70,
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '4px 0 32px rgba(0,0,0,0.08)',
-          fontFamily: "'Geist', 'Inter', sans-serif",   // ← aquí estaba el error de sintaxis
+          borderRight: '1px solid rgba(219, 234, 254, 0.5)',
+          boxShadow: '10px 0 30px rgba(29, 78, 216, 0.08)',
+          fontFamily: "'Inter', 'Segoe UI', sans-serif",
+          transform: 'translateX(0)',
+          transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
-        {/* Header */}
-        <div style={{ padding: '24px 20px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+        <div style={{ padding: '24px 24px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
             <button
               onClick={onClose}
               style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '10px',
-                border: 'none',
+                width: '44px',
+                height: '44px',
+                borderRadius: '14px',
+                border: '1px solid #dbeafe',
                 cursor: 'pointer',
                 flexShrink: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: config.colorBg,
-                color: config.colorText,
+                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                color: '#1d4ed8',
+                boxShadow: '0 4px 10px rgba(29, 78, 216, 0.1)',
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)'
+                e.currentTarget.style.boxShadow = '0 6px 14px rgba(29, 78, 216, 0.15)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)'
+                e.currentTarget.style.boxShadow = '0 4px 10px rgba(29, 78, 216, 0.1)'
               }}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
 
             <div>
-              <p style={{ margin: 0, fontWeight: 600, fontSize: '14px', color: '#1a1a1a', lineHeight: 1.3 }}>
-                Programa de Tutorías
+              <p style={{ margin: 0, fontWeight: 800, fontSize: '16px', color: '#0f172a', lineHeight: 1.2 }}>
+                Tutorías
               </p>
-              {user?.nombre && (
+              {perfil?.nombre_completo && (
                 <p style={{
-                  margin: '3px 0 0',
-                  fontSize: '11px',
-                  color: '#888',
+                  margin: '4px 0 0',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  color: '#64748b',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
-                  maxWidth: '160px',
+                  maxWidth: '200px',
                 }}>
-                  {user.nombre}
+                  {perfil.nombre_completo}
                 </p>
               )}
             </div>
           </div>
 
-          {/* Badge del rol */}
-          <span style={{
-            display: 'inline-block',
-            fontSize: '11px',
-            fontWeight: 600,
-            padding: '3px 10px',
-            borderRadius: '8px',
-            backgroundColor: config.colorBg,
-            color: config.colorText,
-            border: `0.5px solid ${config.colorBorder}`,
-            letterSpacing: '0.02em',
+          <span className="role-badge" style={{
+            backgroundColor: config?.colorBg ?? '#eff6ff',
+            color: config?.colorText ?? '#1e3a8a',
+            border: `1px solid ${config?.colorBorder ?? '#bfdbfe'}`,
           }}>
-            {config.label}
+            <span className="pulse-dot" style={{ color: config?.colorBorder ?? '#3b82f6' }}></span>
+            {config?.label ?? 'Cargando rol'}
           </span>
         </div>
 
-        {/* Divisor */}
-        <div style={{ height: '0.5px', backgroundColor: '#f0f0f0', margin: '0 20px' }} />
+        <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, rgba(226, 232, 240, 0.8), transparent)', margin: '0 24px' }} />
 
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: '16px 12px', overflowY: 'auto' }}>
+        <nav style={{ 
+          flex: 1, 
+          padding: '20px 16px', 
+          overflowY: 'auto',
+          '--active-bg': activeBg,
+          '--active-text': activeText,
+          '--active-border': activeBorder,
+          '--active-shadow': `${activeBorder}40`
+        } as React.CSSProperties}>
+          
           <p style={{
-            fontSize: '10px',
-            fontWeight: 700,
+            fontSize: '11px',
+            fontWeight: 800,
             letterSpacing: '0.15em',
             textTransform: 'uppercase',
-            color: '#bbb',
-            margin: '0 0 10px 6px',
+            color: '#94a3b8',
+            margin: '0 0 12px 10px',
+          }}>
+            Principal
+          </p>
+
+          <NavLink
+            to="/"
+            onClick={onClose}
+            className={({ isActive }) => `nav-link-premium ${isActive ? 'active' : ''}`}
+          >
+            <span className="nav-icon">{icons.dashboard}</span>
+            Dashboard
+          </NavLink>
+
+          <p style={{
+            fontSize: '11px',
+            fontWeight: 800,
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase',
+            color: '#94a3b8',
+            margin: '24px 0 12px 10px',
           }}>
             Mi área
           </p>
@@ -306,51 +455,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               key={item.route}
               to={item.route}
               onClick={onClose}
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '9px 12px',
-                borderRadius: '10px',
-                marginBottom: '3px',
-                textDecoration: 'none',
-                fontSize: '12px',
-                fontWeight: 600,
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase' as const,
-                transition: 'all 0.15s',
-                backgroundColor: isActive ? config.colorBg : 'transparent',
-                color: isActive ? config.colorText : '#555',
-                boxShadow: isActive ? `0 2px 8px ${config.colorBorder}40` : 'none',
-              })}
+              className={({ isActive }) => `nav-link-premium ${isActive ? 'active' : ''}`}
             >
-              <span style={{ flexShrink: 0 }}>{item.icon}</span>
+              <span className="nav-icon">{item.icon}</span>
               {item.label}
             </NavLink>
           ))}
         </nav>
 
-        {/* Logout */}
-        <div style={{ borderTop: '1px solid #fff1f0' }}>
-          <button
-            onClick={handleLogout}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '16px 24px',
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              color: '#dc2626',
-              fontSize: '13px',
-              fontWeight: 700,
-              letterSpacing: '0.04em',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#fff1f0')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-          >
+        <div style={{ borderTop: '1px solid rgba(226, 232, 240, 0.6)', padding: '16px 20px 20px' }}>
+          <button onClick={handleLogout} className="logout-btn">
             {icons.logout}
             Cerrar Sesión
           </button>

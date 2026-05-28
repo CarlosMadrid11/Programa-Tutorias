@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Outlet, useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
-import { useAuth } from '../hooks/useAuth'
+import ToastContainer from './ToastContainer'
+import { useAuth } from '../context/AuthContext'
+import { supabase } from '../utils/supabase'
 
-// ─── Íconos ───────────────────────────────────────────────────────────────────
-const HamburgerIcon = () => (
+const menuIcon = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
     <line x1="3" y1="6"  x2="21" y2="6"/>
     <line x1="3" y1="12" x2="21" y2="12"/>
@@ -12,104 +13,91 @@ const HamburgerIcon = () => (
   </svg>
 )
 
-// ─── Layout ───────────────────────────────────────────────────────────────────
-// Se usa como wrapper de todas las rutas protegidas en AppRouter:
-//
-//   <Route element={<Layout />}>
-//     <Route path="/capturar-asistencia" element={<CapturarAsistencia />} />
-//     ...
-//   </Route>
-//
-// <Outlet /> renderiza la página hija de la ruta activa.
-
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { user } = useAuth()
+  const [periodo, setPeriodo]         = useState('')
+  const { session, perfil, loading }  = useAuth()
+  const navigate                      = useNavigate()
+
+  useEffect(() => {
+    if (!loading && !session) navigate('/login', { replace: true })
+  }, [session, loading, navigate])
+
+  useEffect(() => {
+    supabase.from('periodos_escolares').select('nombre').eq('activo', true).single()
+      .then(({ data }) => {
+        const p = data as { nombre?: string } | null
+        if (p?.nombre) setPeriodo(p.nombre)
+      })
+  }, [])
+
+  if (loading || !session) return null
+
+  const initial = perfil?.nombre_completo?.charAt(0)?.toUpperCase() ?? '?'
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#f8f9fb',
-      fontFamily: "'Geist', 'Inter', sans-serif",
-    }}>
+    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'Inter','Segoe UI',sans-serif" }}>
+      <style>{`
+        * { box-sizing: border-box; }
+        .layout-main { min-height: calc(100vh - 64px); padding: 1.5rem; max-width: 1280px; margin: 0 auto; }
+        @media (max-width: 640px) { .layout-main { padding: 1rem; } }
+      `}</style>
 
-      {/* ── Topbar ────────────────────────────────────────────────────────── */}
+      <ToastContainer />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
       <header style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 20,
-        height: '52px',
-        backgroundColor: '#ffffff',
-        borderBottom: '1px solid #eeeff1',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 20px',
-        gap: '14px',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+        height: 64, background: '#ffffff', borderBottom: '1px solid #e2e8f0',
+        display: 'flex', alignItems: 'center', padding: '0 1.25rem', gap: '0.875rem',
+        position: 'sticky', top: 0, zIndex: 50,
+        boxShadow: '0 1px 3px rgba(30,64,175,0.06)',
       }}>
-        {/* Botón hamburguesa */}
         <button
           onClick={() => setSidebarOpen(true)}
-          aria-label="Abrir menú"
           style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '9px',
-            border: '1px solid #e5e7eb',
-            background: '#fff',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#374151',
-            flexShrink: 0,
-            transition: 'background 0.15s',
+            width: 40, height: 40, border: '1px solid #e2e8f0', borderRadius: 10,
+            background: '#f8fafc', color: '#1d4ed8', cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}
-          onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
-          onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#ffffff')}
+          aria-label="Abrir menú"
         >
-          <HamburgerIcon />
+          {menuIcon}
         </button>
 
-        {/* Título */}
-        <span style={{
-          fontSize: '14px',
-          fontWeight: 600,
-          color: '#111827',
-          letterSpacing: '-0.01em',
-        }}>
-          Programa de Tutorías
-        </span>
-
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
-
-        {/* Nombre del usuario (derecha) */}
-        {user?.nombre && (
-          <span style={{
-            fontSize: '12px',
-            color: '#6b7280',
-            fontWeight: 500,
-            maxWidth: '180px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}>
-            {user.nombre}
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e3a8a', lineHeight: 1.2 }}>
+            Programa de Tutorías
           </span>
+          {periodo && (
+            <span style={{ fontSize: '0.72rem', color: '#64748b', lineHeight: 1.2 }}>{periodo}</span>
+          )}
+        </div>
+
+        {perfil && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+            <span style={{
+              display: 'none',
+              fontSize: '0.8rem', color: '#334155', maxWidth: 160,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}
+              className="header-name"
+            >
+              {perfil.nombre_completo}
+            </span>
+            <div style={{
+              width: 34, height: 34, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
+              color: '#fff', fontWeight: 700, fontSize: '0.82rem',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              {initial}
+            </div>
+          </div>
         )}
       </header>
 
-      {/* ── Sidebar ───────────────────────────────────────────────────────── */}
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
-      {/* ── Contenido ─────────────────────────────────────────────────────── */}
-      {/* <Outlet /> es donde React Router monta la página de la ruta activa   */}
-      <main style={{
-        padding: '28px 24px',
-        maxWidth: '960px',
-        margin: '0 auto',
-      }}>
+      <main className="layout-main">
         <Outlet />
       </main>
     </div>

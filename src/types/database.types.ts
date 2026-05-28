@@ -1,730 +1,318 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
+export type RolUsuario =
+  | 'coordinador_institucional'
+  | 'coordinador_departamental'
+  | 'jefe_departamento'
+  | 'jefe_desarrollo_academico'
+  | 'tutor'
+  | 'tutorado'
+  | 'director'
+  | 'subdirector'
+
+export type EstadoRegistro  = 'activo' | 'inactivo' | 'baja'
+export type TipoSesion      = 'grupal' | 'individual' | 'virtual' | 'plenaria'
+export type FasePT          = 'diagnostico' | 'planeacion' | 'acompanamiento' | 'seguimiento' | 'evaluacion'
+export type EstadoActividad = 'activa' | 'cerrada' | 'bloqueada'
+export type EstadoAsistencia= 'presente' | 'ausente' | 'justificado'
+export type EstadoEvidencia = 'pendiente' | 'entregada' | 'aceptada' | 'requiere_correccion' | 'rechazada'
+export type TipoEvaluacion  = 'parcial_1' | 'parcial_2' | 'final'
+export type EstadoAcreditacion = 'al_corriente' | 'en_riesgo' | 'atencion_urgente' | 'acreditado' | 'no_acreditado'
+
+export interface Perfil {
+  id: string
+  rol: RolUsuario
+  nombre_completo: string
+  correo_institucional: string
+  numero_empleado?: string | null
+  numero_control?: string | null
+  telefono?: string | null
+  departamento?: string | null
+  carrera?: string | null
+  estado: EstadoRegistro
+  primer_acceso: boolean
+  creado_por?: string | null
+  creado_en: string
+  actualizado_en: string
+}
+
+export interface PeriodoEscolar {
+  id: string
+  nombre: string
+  fecha_inicio: string
+  fecha_fin: string
+  activo: boolean
+  creado_en: string
+}
+
+export interface ProgramaTutorias {
+  id: string
+  periodo_id: string
+  nombre: string
+  descripcion?: string | null
+  objetivo_general?: string | null
+  fecha_inicio: string
+  fecha_fin: string
+  activo: boolean
+  creado_por: string
+  creado_en: string
+  actualizado_en: string
+}
+
+export interface ActividadPT {
+  id: string
+  programa_id: string
+  nombre: string
+  descripcion?: string | null
+  tipo_sesion: TipoSesion
+  fase: FasePT
+  fecha_programada: string
+  requiere_evidencia: boolean
+  tipo_archivo_aceptado?: string[] | null
+  fecha_limite_evidencia?: string | null
+  estado: EstadoActividad
+  bloqueada_modificacion: boolean
+  creado_por: string
+  creado_en: string
+  actualizado_en: string
+}
+
+export interface AsignacionTutor {
+  id: string
+  periodo_id: string
+  tutor_id: string
+  carrera: string
+  semestre_generacional: string
+  grupo: string
+  dia_semana: string
+  hora_inicio: string
+  hora_fin: string
+  salon: string
+  activa: boolean
+  asignado_por: string
+  creado_en: string
+  actualizado_en: string
+}
+
+export interface AsignacionTutorado {
+  id: string
+  asignacion_id: string
+  tutorado_id: string
+  periodo_id: string
+  fecha_asignacion: string
+  activa: boolean
+  justificacion_reasignacion?: string | null
+  asignado_por: string
+  creado_en: string
+}
+
+export interface Sesion {
+  id: string
+  asignacion_id: string
+  actividad_pt_id?: string | null
+  fecha_realizada: string
+  aula?: string | null
+  descripcion?: string | null
+  es_extraordinaria: boolean
+  justificacion_ext?: string | null
+  cerrada: boolean
+  creado_por: string
+  creado_en: string
+}
+
+export interface Asistencia {
+  id: string
+  sesion_id: string
+  tutorado_id: string
+  estado: EstadoAsistencia
+  observaciones?: string | null
+  fecha_captura: string
+  capturado_por: string
+}
+
+export interface Evidencia {
+  id: string
+  actividad_pt_id: string
+  tutorado_id: string
+  periodo_id: string
+  archivo_url?: string | null
+  archivo_nombre?: string | null
+  archivo_tipo?: string | null
+  archivo_tamano_kb?: number | null
+  comentario_alumno?: string | null
+  estado: EstadoEvidencia
+  retroalimentacion?: string | null
+  evaluada_por?: string | null
+  fecha_entrega: string
+  fecha_evaluacion?: string | null
+  version: number
+  creado_en: string
+}
+
+export interface Evaluacion {
+  id: string
+  tutorado_id: string
+  asignacion_id: string
+  periodo_id: string
+  tipo: TipoEvaluacion
+  calificacion_personal?: number | null
+  calificacion_academica?: number | null
+  calificacion_profesional?: number | null
+  calificacion_final?: number | null
+  observaciones?: string | null
+  recomendaciones?: string | null
+  estado_tutorado?: EstadoAcreditacion | null
+  requiere_canalizacion: boolean
+  evaluado_por: string
+  creado_en: string
+  actualizado_en: string
+}
+
+export interface Acreditacion {
+  id: string
+  tutorado_id: string
+  periodo_id: string
+  asignacion_id: string
+  acreditado: boolean
+  porcentaje_asistencia?: number | null
+  calificacion_final?: number | null
+  motivo_no_acreditacion?: string | null
+  numero_folio?: string | null
+  pdf_url?: string | null
+  generado_por: string
+  fecha_generacion: string
+}
+
+export interface AlertaSistema {
+  id: string
+  tipo: string
+  tutorado_id: string
+  tutor_id?: string | null
+  mensaje: string
+  resuelta: boolean
+  creado_en: string
+}
+
+export interface ResumenTutorado {
+  tutorado_id: string
+  nombre_completo: string
+  numero_control: string | null
+  carrera: string | null
+  periodo_id: string
+  periodo_nombre: string | null
+  tutor_nombre: string | null
+  total_sesiones: number | null
+  sesiones_presentes: number | null
+  evidencias_entregadas: number | null
+  calificacion_final: number | null
+  estado_acreditacion: EstadoAcreditacion | null
+}
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
-      actividad_planificada: {
-        Row: {
-          descripcion: string | null
-          fase_pt: string | null
-          fecha_limite_entrega: string | null
-          fecha_programada: string
-          id_actividad: string
-          id_programa: string | null
-          justificacion_modificacion: string | null
-          nombre_actividad: string
-          requiere_evidencia: boolean | null
-          tipo_evidencia_esperada: string | null
-          tipo_sesion: string | null
-        }
-        Insert: {
-          descripcion?: string | null
-          fase_pt?: string | null
-          fecha_limite_entrega?: string | null
-          fecha_programada: string
-          id_actividad?: string
-          id_programa?: string | null
-          justificacion_modificacion?: string | null
-          nombre_actividad: string
-          requiere_evidencia?: boolean | null
-          tipo_evidencia_esperada?: string | null
-          tipo_sesion?: string | null
-        }
-        Update: {
-          descripcion?: string | null
-          fase_pt?: string | null
-          fecha_limite_entrega?: string | null
-          fecha_programada?: string
-          id_actividad?: string
-          id_programa?: string | null
-          justificacion_modificacion?: string | null
-          nombre_actividad?: string
-          requiere_evidencia?: boolean | null
-          tipo_evidencia_esperada?: string | null
-          tipo_sesion?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "actividad_planificada_id_programa_fkey"
-            columns: ["id_programa"]
-            isOneToOne: false
-            referencedRelation: "programa_tutorias"
-            referencedColumns: ["id_programa"]
-          },
-        ]
-      }
-      asignacion_tutor: {
-        Row: {
-          cupo_maximo: number | null
-          grupo_seccion: string
-          hora_fin: string | null
-          hora_inicio: string | null
-          horario_dia: string | null
-          id_asignacion: string
-          id_coordinador_dept: string | null
-          id_programa: string | null
-          id_tutor: string | null
-          salon: string | null
-        }
-        Insert: {
-          cupo_maximo?: number | null
-          grupo_seccion: string
-          hora_fin?: string | null
-          hora_inicio?: string | null
-          horario_dia?: string | null
-          id_asignacion?: string
-          id_coordinador_dept?: string | null
-          id_programa?: string | null
-          id_tutor?: string | null
-          salon?: string | null
-        }
-        Update: {
-          cupo_maximo?: number | null
-          grupo_seccion?: string
-          hora_fin?: string | null
-          hora_inicio?: string | null
-          horario_dia?: string | null
-          id_asignacion?: string
-          id_coordinador_dept?: string | null
-          id_programa?: string | null
-          id_tutor?: string | null
-          salon?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "asignacion_tutor_id_coordinador_dept_fkey"
-            columns: ["id_coordinador_dept"]
-            isOneToOne: false
-            referencedRelation: "coordinador_departamental"
-            referencedColumns: ["id_sistema"]
-          },
-          {
-            foreignKeyName: "asignacion_tutor_id_programa_fkey"
-            columns: ["id_programa"]
-            isOneToOne: false
-            referencedRelation: "programa_tutorias"
-            referencedColumns: ["id_programa"]
-          },
-          {
-            foreignKeyName: "asignacion_tutor_id_tutor_fkey"
-            columns: ["id_tutor"]
-            isOneToOne: false
-            referencedRelation: "tutor"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
-      }
-      asistencia: {
-        Row: {
-          estatus: string | null
-          fecha_captura: string | null
-          id_asistencia: string
-          id_sesion: string | null
-          id_tutorado: string | null
-        }
-        Insert: {
-          estatus?: string | null
-          fecha_captura?: string | null
-          id_asistencia?: string
-          id_sesion?: string | null
-          id_tutorado?: string | null
-        }
-        Update: {
-          estatus?: string | null
-          fecha_captura?: string | null
-          id_asistencia?: string
-          id_sesion?: string | null
-          id_tutorado?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "asistencia_id_sesion_fkey"
-            columns: ["id_sesion"]
-            isOneToOne: false
-            referencedRelation: "sesion"
-            referencedColumns: ["id_sesion"]
-          },
-          {
-            foreignKeyName: "asistencia_id_tutorado_fkey"
-            columns: ["id_tutorado"]
-            isOneToOne: false
-            referencedRelation: "tutorado"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
-      }
-      coordinador_departamental: {
-        Row: {
-          gestiona_grupos: boolean | null
-          id_sistema: string
-        }
-        Insert: {
-          gestiona_grupos?: boolean | null
-          id_sistema: string
-        }
-        Update: {
-          gestiona_grupos?: boolean | null
-          id_sistema?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "coordinador_departamental_id_sistema_fkey"
-            columns: ["id_sistema"]
-            isOneToOne: true
-            referencedRelation: "sistema"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
-      }
-      coordinador_institucional: {
-        Row: {
-          id_sistema: string
-        }
-        Insert: {
-          id_sistema: string
-        }
-        Update: {
-          id_sistema?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "coordinador_institucional_id_sistema_fkey"
-            columns: ["id_sistema"]
-            isOneToOne: true
-            referencedRelation: "sistema"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
-      }
-      evaluacion_desempeno: {
-        Row: {
-          estatus_riesgo: string | null
-          fecha_registro: string | null
-          id_evaluacion: string
-          id_tutor: string | null
-          id_tutorado: string | null
-          nivel_desempeno: number | null
-          periodo_parcial: string | null
-          plan_accion_seguimiento: string | null
-          requiere_canalizacion: boolean | null
-        }
-        Insert: {
-          estatus_riesgo?: string | null
-          fecha_registro?: string | null
-          id_evaluacion?: string
-          id_tutor?: string | null
-          id_tutorado?: string | null
-          nivel_desempeno?: number | null
-          periodo_parcial?: string | null
-          plan_accion_seguimiento?: string | null
-          requiere_canalizacion?: boolean | null
-        }
-        Update: {
-          estatus_riesgo?: string | null
-          fecha_registro?: string | null
-          id_evaluacion?: string
-          id_tutor?: string | null
-          id_tutorado?: string | null
-          nivel_desempeno?: number | null
-          periodo_parcial?: string | null
-          plan_accion_seguimiento?: string | null
-          requiere_canalizacion?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "evaluacion_desempeno_id_tutor_fkey"
-            columns: ["id_tutor"]
-            isOneToOne: false
-            referencedRelation: "tutor"
-            referencedColumns: ["id_sistema"]
-          },
-          {
-            foreignKeyName: "evaluacion_desempeno_id_tutorado_fkey"
-            columns: ["id_tutorado"]
-            isOneToOne: false
-            referencedRelation: "tutorado"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
-      }
-      evidencia: {
-        Row: {
-          calificacion: number | null
-          comentario_tutorado: string | null
-          estatus_evaluacion: string | null
-          fecha_entrega: string | null
-          id_actividad: string | null
-          id_evidencia: string
-          id_tutor: string | null
-          id_tutorado: string | null
-          retroalimentacion: string | null
-          url_archivo: string
-        }
-        Insert: {
-          calificacion?: number | null
-          comentario_tutorado?: string | null
-          estatus_evaluacion?: string | null
-          fecha_entrega?: string | null
-          id_actividad?: string | null
-          id_evidencia?: string
-          id_tutor?: string | null
-          id_tutorado?: string | null
-          retroalimentacion?: string | null
-          url_archivo: string
-        }
-        Update: {
-          calificacion?: number | null
-          comentario_tutorado?: string | null
-          estatus_evaluacion?: string | null
-          fecha_entrega?: string | null
-          id_actividad?: string | null
-          id_evidencia?: string
-          id_tutor?: string | null
-          id_tutorado?: string | null
-          retroalimentacion?: string | null
-          url_archivo?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "evidencia_id_actividad_fkey"
-            columns: ["id_actividad"]
-            isOneToOne: false
-            referencedRelation: "actividad_planificada"
-            referencedColumns: ["id_actividad"]
-          },
-          {
-            foreignKeyName: "evidencia_id_tutor_fkey"
-            columns: ["id_tutor"]
-            isOneToOne: false
-            referencedRelation: "tutor"
-            referencedColumns: ["id_sistema"]
-          },
-          {
-            foreignKeyName: "evidencia_id_tutorado_fkey"
-            columns: ["id_tutorado"]
-            isOneToOne: false
-            referencedRelation: "tutorado"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
-      }
-      itculiacan: {
-        Row: {
-          direccion: string | null
-          id_institucional: string | null
-          id_tec: string
-          nombre: string
-          telefono: string | null
-        }
-        Insert: {
-          direccion?: string | null
-          id_institucional?: string | null
-          id_tec?: string
-          nombre: string
-          telefono?: string | null
-        }
-        Update: {
-          direccion?: string | null
-          id_institucional?: string | null
-          id_tec?: string
-          nombre?: string
-          telefono?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "itculiacan_id_institucional_fkey"
-            columns: ["id_institucional"]
-            isOneToOne: false
-            referencedRelation: "tecnm"
-            referencedColumns: ["id_institucional"]
-          },
-        ]
-      }
-      jefe_departamento_academico: {
-        Row: {
-          consulta_autorizada: boolean | null
-          id_sistema: string
-        }
-        Insert: {
-          consulta_autorizada?: boolean | null
-          id_sistema: string
-        }
-        Update: {
-          consulta_autorizada?: boolean | null
-          id_sistema?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "jefe_departamento_academico_id_sistema_fkey"
-            columns: ["id_sistema"]
-            isOneToOne: true
-            referencedRelation: "sistema"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
-      }
-      programa_tutorias: {
-        Row: {
-          descripcion: string | null
-          estado_periodo: string | null
-          fecha_fin: string
-          fecha_inicio: string
-          id_programa: string
-          id_tec: string | null
-          semestre_periodo: string
-        }
-        Insert: {
-          descripcion?: string | null
-          estado_periodo?: string | null
-          fecha_fin: string
-          fecha_inicio: string
-          id_programa?: string
-          id_tec?: string | null
-          semestre_periodo: string
-        }
-        Update: {
-          descripcion?: string | null
-          estado_periodo?: string | null
-          fecha_fin?: string
-          fecha_inicio?: string
-          id_programa?: string
-          id_tec?: string | null
-          semestre_periodo?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "programa_tutorias_id_tec_fkey"
-            columns: ["id_tec"]
-            isOneToOne: false
-            referencedRelation: "itculiacan"
-            referencedColumns: ["id_tec"]
-          },
-        ]
-      }
-      sesion: {
-        Row: {
-          aula: string | null
-          comentarios: string | null
-          fecha_realizacion: string | null
-          id_actividad: string | null
-          id_sesion: string
-          id_tutor: string | null
-        }
-        Insert: {
-          aula?: string | null
-          comentarios?: string | null
-          fecha_realizacion?: string | null
-          id_actividad?: string | null
-          id_sesion?: string
-          id_tutor?: string | null
-        }
-        Update: {
-          aula?: string | null
-          comentarios?: string | null
-          fecha_realizacion?: string | null
-          id_actividad?: string | null
-          id_sesion?: string
-          id_tutor?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sesion_id_actividad_fkey"
-            columns: ["id_actividad"]
-            isOneToOne: false
-            referencedRelation: "actividad_planificada"
-            referencedColumns: ["id_actividad"]
-          },
-          {
-            foreignKeyName: "sesion_id_tutor_fkey"
-            columns: ["id_tutor"]
-            isOneToOne: false
-            referencedRelation: "tutor"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
-      }
-      sistema: {
-        Row: {
-          activo: boolean | null
-          contrasena: string
-          correo_institucional: string
-          departamento_carrera: string | null
-          id_sistema: string
-          matricula_empleado: string
-          nombre: string
-          rol: string
-          telefono: string | null
-        }
-        Insert: {
-          activo?: boolean | null
-          contrasena: string
-          correo_institucional: string
-          departamento_carrera?: string | null
-          id_sistema?: string
-          matricula_empleado: string
-          nombre: string
-          rol: string
-          telefono?: string | null
-        }
-        Update: {
-          activo?: boolean | null
-          contrasena?: string
-          correo_institucional?: string
-          departamento_carrera?: string | null
-          id_sistema?: string
-          matricula_empleado?: string
-          nombre?: string
-          rol?: string
-          telefono?: string | null
-        }
+      perfiles: {
+        Row: Perfil
+        Insert: Omit<Perfil, 'creado_en' | 'actualizado_en'>
+        Update: Partial<Omit<Perfil, 'id' | 'creado_en' | 'actualizado_en'>>
         Relationships: []
       }
-      tecnm: {
-        Row: {
-          id_institucional: string
-          nombre_institucion: string | null
-        }
-        Insert: {
-          id_institucional?: string
-          nombre_institucion?: string | null
-        }
-        Update: {
-          id_institucional?: string
-          nombre_institucion?: string | null
-        }
+      periodos_escolares: {
+        Row: PeriodoEscolar
+        Insert: Omit<PeriodoEscolar, 'id' | 'creado_en'>
+        Update: Partial<Omit<PeriodoEscolar, 'id' | 'creado_en'>>
         Relationships: []
       }
-      tutor: {
-        Row: {
-          cedula_profesional: string | null
-          departamento_academico: string | null
-          id_sistema: string
-        }
-        Insert: {
-          cedula_profesional?: string | null
-          departamento_academico?: string | null
-          id_sistema: string
-        }
-        Update: {
-          cedula_profesional?: string | null
-          departamento_academico?: string | null
-          id_sistema?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tutor_id_sistema_fkey"
-            columns: ["id_sistema"]
-            isOneToOne: true
-            referencedRelation: "sistema"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
+      programas_tutorias: {
+        Row: ProgramaTutorias
+        Insert: Omit<ProgramaTutorias, 'id' | 'creado_en' | 'actualizado_en'>
+        Update: Partial<Omit<ProgramaTutorias, 'id' | 'creado_en' | 'actualizado_en'>>
+        Relationships: []
       }
-      tutorado: {
-        Row: {
-          carrera: string
-          id_sistema: string
-          no_control: string
-        }
-        Insert: {
-          carrera: string
-          id_sistema: string
-          no_control: string
-        }
-        Update: {
-          carrera?: string
-          id_sistema?: string
-          no_control?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tutorado_id_sistema_fkey"
-            columns: ["id_sistema"]
-            isOneToOne: true
-            referencedRelation: "sistema"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
+      actividades_pt: {
+        Row: ActividadPT
+        Insert: Omit<ActividadPT, 'id' | 'creado_en' | 'actualizado_en'>
+        Update: Partial<Omit<ActividadPT, 'id' | 'creado_en' | 'actualizado_en'>>
+        Relationships: []
       }
-      tutorado_asignado: {
-        Row: {
-          fecha_vinculacion: string | null
-          id_asignacion_tutor: string
-          id_tutorado: string
-        }
-        Insert: {
-          fecha_vinculacion?: string | null
-          id_asignacion_tutor: string
-          id_tutorado: string
-        }
-        Update: {
-          fecha_vinculacion?: string | null
-          id_asignacion_tutor?: string
-          id_tutorado?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tutorado_asignado_id_asignacion_tutor_fkey"
-            columns: ["id_asignacion_tutor"]
-            isOneToOne: false
-            referencedRelation: "asignacion_tutor"
-            referencedColumns: ["id_asignacion"]
-          },
-          {
-            foreignKeyName: "tutorado_asignado_id_tutorado_fkey"
-            columns: ["id_tutorado"]
-            isOneToOne: false
-            referencedRelation: "tutorado"
-            referencedColumns: ["id_sistema"]
-          },
-        ]
+      asignaciones_tutor: {
+        Row: AsignacionTutor
+        Insert: Omit<AsignacionTutor, 'id' | 'creado_en' | 'actualizado_en'>
+        Update: Partial<Omit<AsignacionTutor, 'id' | 'creado_en' | 'actualizado_en'>>
+        Relationships: []
+      }
+      asignaciones_tutorado: {
+        Row: AsignacionTutorado
+        Insert: Omit<AsignacionTutorado, 'id' | 'creado_en'>
+        Update: Partial<Omit<AsignacionTutorado, 'id' | 'creado_en'>>
+        Relationships: []
+      }
+      sesiones: {
+        Row: Sesion
+        Insert: Omit<Sesion, 'id' | 'creado_en'>
+        Update: Partial<Omit<Sesion, 'id' | 'creado_en'>>
+        Relationships: []
+      }
+      asistencias: {
+        Row: Asistencia
+        Insert: Omit<Asistencia, 'id'>
+        Update: Partial<Omit<Asistencia, 'id'>>
+        Relationships: []
+      }
+      evidencias: {
+        Row: Evidencia
+        Insert: Omit<Evidencia, 'id' | 'creado_en' | 'version'>
+        Update: Partial<Omit<Evidencia, 'id' | 'creado_en'>>
+        Relationships: []
+      }
+      evaluaciones: {
+        Row: Evaluacion
+        Insert: Omit<Evaluacion, 'id' | 'creado_en' | 'actualizado_en'>
+        Update: Partial<Omit<Evaluacion, 'id' | 'creado_en' | 'actualizado_en'>>
+        Relationships: []
+      }
+      acreditaciones: {
+        Row: Acreditacion
+        Insert: Omit<Acreditacion, 'id'>
+        Update: Partial<Omit<Acreditacion, 'id'>>
+        Relationships: []
+      }
+      alertas_sistema: {
+        Row: AlertaSistema
+        Insert: Omit<AlertaSistema, 'id' | 'creado_en'>
+        Update: Partial<Pick<AlertaSistema, 'resuelta'>>
+        Relationships: []
       }
     }
     Views: {
-      [_ in never]: never
+      v_resumen_tutorado: {
+        Row: ResumenTutorado
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      fn_porcentaje_asistencia: {
+        Args: { p_tutorado_id: string; p_periodo_id: string }
+        Returns: number
+      }
+      fn_get_rol_usuario: {
+        Args: Record<string, never>
+        Returns: RolUsuario
+      }
+      fn_tiene_rol: {
+        Args: { p_rol: RolUsuario }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      rol_usuario: RolUsuario
+      estado_registro: EstadoRegistro
+      tipo_sesion: TipoSesion
+      fase_pt: FasePT
+      estado_actividad: EstadoActividad
+      estado_asistencia: EstadoAsistencia
+      estado_evidencia: EstadoEvidencia
+      tipo_evaluacion: TipoEvaluacion
+      estado_acreditacion: EstadoAcreditacion
     }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+    CompositeTypes: Record<string, never>
   }
 }
-
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
-
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
-
-export type Tables<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R
-    }
-    ? R
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
-    : never
-
-export type TablesInsert<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
-    }
-    ? I
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
-    : never
-
-export type TablesUpdate<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
-    }
-    ? U
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
-    : never
-
-export type Enums<
-  DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
-> = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
-
-export type CompositeTypes<
-  PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
-
-export const Constants = {
-  public: {
-    Enums: {},
-  },
-} as const

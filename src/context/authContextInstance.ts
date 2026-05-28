@@ -1,7 +1,6 @@
 import { createContext } from 'react'
-import type { Tables } from '../types/database.types'
 
-type SistemaRow = Tables<'sistema'>
+type SistemaRow = Record<string, any>
 
 export interface AuthState {
   user: SistemaRow | null
