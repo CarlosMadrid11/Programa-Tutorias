@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useToast } from '../context/ToastContext'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../utils/supabase'
+import RefreshButton from '../components/RefreshButton'
 
 interface TutoradoRow {
   id: string
@@ -31,6 +32,8 @@ export default function ConsultarTutorados() {
   const [loading,   setLoading]   = useState(true)
   const [search,    setSearch]    = useState('')
   const [filtro,    setFiltro]    = useState('all')
+  const [refreshTick, setRefreshTick] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     if (!perfil || !rol) return
@@ -74,7 +77,7 @@ export default function ConsultarTutorados() {
       setTutorados(rows); setLoading(false)
     }
     fetch()
-  }, [perfil, rol])
+  }, [perfil, rol, refreshTick, toast])
 
   const filtered = tutorados.filter(t => {
     const matchSearch = t.nombre_completo.toLowerCase().includes(search.toLowerCase()) || (t.numero_control ?? '').includes(search)
@@ -109,9 +112,12 @@ export default function ConsultarTutorados() {
         @media(max-width:640px){thead th:nth-child(4),td:nth-child(4){display:none}}
       `}</style>
 
-      <div style={{ marginBottom:'1.25rem' }}>
-        <h1 className="page-title">Consultar Tutorados</h1>
-        <p className="page-sub">Seguimiento individual de tutorados asignados</p>
+      <div style={{ marginBottom:'1.25rem', display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'0.75rem' }}>
+        <div>
+          <h1 className="page-title">Consultar Tutorados</h1>
+          <p className="page-sub">Seguimiento individual de tutorados asignados</p>
+        </div>
+        <RefreshButton onClick={() => { setRefreshing(true); setRefreshTick((t) => t + 1); setTimeout(() => setRefreshing(false), 500) }} loading={refreshing} />
       </div>
 
       <div className="ctrl-row">

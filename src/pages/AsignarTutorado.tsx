@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useToast } from '../context/ToastContext'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../utils/supabase'
+import RefreshButton from '../components/RefreshButton'
 
 interface AsigTutor    { id: string; tutor_nombre: string; carrera: string; grupo: string; cupo: number }
 interface Tutorado     { id: string; nombre_completo: string; numero_control: string | null; carrera: string | null }
@@ -18,6 +19,8 @@ export default function AsignarTutorado() {
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
   const [periodoId,     setPeriodoId]     = useState('')
   const [saving,        setSaving]        = useState(false)
+  const [refreshTick,   setRefreshTick]   = useState(0)
+  const [refreshing,    setRefreshing]    = useState(false)
 
   useEffect(() => {
     supabase.from('periodos_escolares').select('id').eq('activo',true).single()
@@ -65,7 +68,7 @@ export default function AsignarTutorado() {
       setTutoradosCon(conRows)
       setSeleccionados(new Set())
     })
-  }, [asigActual, periodoId, asigTutores])
+  }, [asigActual, periodoId, asigTutores, refreshTick])
 
   function toggleSel(id: string) {
     setSeleccionados(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n })
@@ -123,9 +126,12 @@ export default function AsignarTutorado() {
         @media(max-width:640px){.two-col{grid-template-columns:1fr}}
       `}</style>
 
-      <div style={{ marginBottom:'1.25rem' }}>
+      <div style={{ marginBottom:'1.25rem', display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'0.75rem' }}>
+        <div>
         <h1 className="page-title">Asignar Tutorados</h1>
         <p className="page-sub">Vincula tutorados a los grupos tutoriales</p>
+        </div>
+        <RefreshButton onClick={() => { setRefreshing(true); setRefreshTick((t) => t + 1); setTimeout(() => setRefreshing(false), 500) }} loading={refreshing} />
       </div>
 
       <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap' }}>

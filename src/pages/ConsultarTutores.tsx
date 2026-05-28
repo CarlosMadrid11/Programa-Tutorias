@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useToast } from '../context/ToastContext'
 import { supabase } from '../utils/supabase'
+import RefreshButton from '../components/RefreshButton'
 
 interface TutorRow {
   id: string
@@ -19,6 +20,8 @@ export default function ConsultarTutores() {
   const [search,   setSearch]   = useState('')
   const [carrera,  setCarrera]  = useState('all')
   const [carreras, setCarreras] = useState<string[]>([])
+  const [refreshTick, setRefreshTick] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     async function fetch() {
@@ -50,7 +53,7 @@ export default function ConsultarTutores() {
       setLoading(false)
     }
     fetch()
-  }, [])
+  }, [refreshTick, toast])
 
   const filtered = tutores.filter(t => {
     const ms = t.nombre_completo.toLowerCase().includes(search.toLowerCase()) || t.correo_institucional.toLowerCase().includes(search.toLowerCase())
@@ -86,9 +89,12 @@ export default function ConsultarTutores() {
         @media(max-width:640px){thead th:nth-child(3),td:nth-child(3){display:none}}
       `}</style>
 
-      <div style={{ marginBottom:'1.25rem' }}>
-        <h1 className="page-title">Consultar Tutores</h1>
-        <p className="page-sub">Distribución de tutores y grupos tutoriales del periodo activo</p>
+      <div style={{ marginBottom:'1.25rem', display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'0.75rem' }}>
+        <div>
+          <h1 className="page-title">Consultar Tutores</h1>
+          <p className="page-sub">Distribución de tutores y grupos tutoriales del periodo activo</p>
+        </div>
+        <RefreshButton onClick={() => { setRefreshing(true); setRefreshTick((t) => t + 1); setTimeout(() => setRefreshing(false), 500) }} loading={refreshing} />
       </div>
 
       <div className="stats-row">

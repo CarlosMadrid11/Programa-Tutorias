@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -17,6 +18,7 @@ interface AuthContextValue {
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
+  refreshPerfil: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -27,10 +29,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [perfil,  setPerfil]  = useState<Perfil | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const perfilRef = useRef<Perfil | null>(null)
+  const profileUserIdRef = useRef<string | null>(null)
+  const lastAccessTokenRef = useRef<string | null>(null)
+  const fetchInFlightRef = useRef<Promise<Perfil | null> | null>(null)
+  const fetchInFlightUserIdRef = useRef<string | null>(null)
+  const sessionHydratedRef = useRef(false)
+
+  const syncPerfil = (data: Perfil | null, userId: string | null) => {
+    perfilRef.current = data
+    profileUserIdRef.current = userId
+    setPerfil(data)
+  }
+
   const clearAuthState = () => {
     setSession(null)
     setUser(null)
-    setPerfil(null)
+    syncPerfil(null, null)
+    lastAccessTokenRef.current = null
+    fetchInFlightRef.current = null
+    fetchInFlightUserIdRef.current = null
   }
 
   const clearBrowserCredentials = () => {
@@ -56,74 +74,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const fetchPerfil = async (userId: string): Promise<Perfil | null> => {
-    console.log('fetchPerfil: querying database for userId:', userId)
-    try {
-      const queryPromise = supabase
+    if (fetchInFlightRef.current && fetchInFlightUserIdRef.current === userId) {
+      return fetchInFlightRef.current
+    }
+
+    const query = (async () => {
+      const { data, error } = await supabase
         .from('perfiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle()
 
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT_EXCEEDED')), 4000)
-      )
-
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any
-
       if (error) {
-        console.error('fetchPerfil: Error fetching profile from Supabase:', error)
+        console.error('fetchPerfil: error al consultar perfil:', error.message)
         return null
       }
-      console.log('fetchPerfil: query result:', data)
       return (data as Perfil | null) ?? null
-    } catch (err: any) {
-      if (err?.message === 'TIMEOUT_EXCEEDED') {
-        console.error('fetchPerfil: La consulta a la base de datos excedió el límite de 4 segundos (TIMEOUT).')
-      } else {
-        console.error('fetchPerfil: Error inesperado:', err)
+    })()
+
+    fetchInFlightRef.current = query
+    fetchInFlightUserIdRef.current = userId
+
+    try {
+      return await query
+    } finally {
+      if (fetchInFlightRef.current === query) {
+        fetchInFlightRef.current = null
+        fetchInFlightUserIdRef.current = null
       }
-      return null
     }
   }
 
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const loadPerfilIfNeeded = async (
+    userId: string,
+    options?: { force?: boolean },
+  ): Promise<Perfil | null> => {
+    const force = options?.force ?? false
 
-  const fetchPerfilWithRetry = async (userId: string): Promise<Perfil | null> => {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const perfilData = await fetchPerfil(userId)
-      if (perfilData) return perfilData
-      await wait(300)
+    if (!force && profileUserIdRef.current === userId && perfilRef.current) {
+      return perfilRef.current
     }
+
+    const perfilData = await fetchPerfil(userId)
+    if (perfilData) {
+      syncPerfil(perfilData, userId)
+      return perfilData
+    }
+
+    if (profileUserIdRef.current === userId && perfilRef.current) {
+      console.warn('fetchPerfil: falló la consulta; se conserva el perfil en caché.')
+      return perfilRef.current
+    }
+
     return null
   }
 
-  // Ref to hold current perfil without triggering re-renders in the listener
-  let perfilRef: Perfil | null = null
-
-  const applySession = async (nextSession: Session | null, forceRefetch = false): Promise<boolean> => {
-    setSession(nextSession)
-    setUser(nextSession?.user ?? null)
-    if (nextSession?.user) {
-      // If we already have a profile in memory and this is just a token refresh, skip DB query
-      if (perfilRef && !forceRefetch) {
-        console.log('applySession: Token refreshed, keeping existing profile in memory.')
-        return true
-      }
-      console.log('applySession: Fetching profile for user:', nextSession.user.id)
-      const perfilData = await fetchPerfilWithRetry(nextSession.user.id)
-      if (!perfilData) {
-        console.warn('applySession: Profile not found for user ID:', nextSession.user.id)
-        setPerfil(null)
-        perfilRef = null
-        return true
-      }
-      console.log('applySession: Profile loaded successfully:', perfilData)
-      perfilRef = perfilData
-      setPerfil(perfilData)
-    } else {
-      setPerfil(null)
-      perfilRef = null
+  const applySession = async (
+    nextSession: Session | null,
+    options?: { forcePerfil?: boolean },
+  ): Promise<boolean> => {
+    if (!nextSession?.user) {
+      clearAuthState()
+      return true
     }
+
+    const userId = nextSession.user.id
+    const accessToken = nextSession.access_token
+    const forcePerfil = options?.forcePerfil ?? false
+    const hasCachedProfile =
+      profileUserIdRef.current === userId && perfilRef.current !== null
+    const sameToken = lastAccessTokenRef.current === accessToken
+
+    setSession(nextSession)
+    setUser(nextSession.user)
+    lastAccessTokenRef.current = accessToken
+
+    if (!forcePerfil && hasCachedProfile && sameToken) {
+      return true
+    }
+
+    if (!forcePerfil && hasCachedProfile) {
+      return true
+    }
+
+    await loadPerfilIfNeeded(userId, { force: forcePerfil })
     return true
   }
 
@@ -131,7 +165,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true
     const failsafe = setTimeout(() => {
       if (mounted) setLoading(false)
-    }, 6000)
+    }, 8000)
+
+    const finishLoading = () => {
+      if (mounted) setLoading(false)
+    }
 
     const init = async () => {
       try {
@@ -142,40 +180,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearAuthState()
           return
         }
-        await applySession(data.session, true)
+        sessionHydratedRef.current = true
+        await applySession(data.session)
       } catch {
         if (!mounted) return
         clearAuthState()
       } finally {
-        if (mounted) setLoading(false)
+        finishLoading()
       }
     }
 
-    init()
+    void init()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, nextSession) => {
+      (event, nextSession) => {
         if (!mounted) return
-        console.log('onAuthStateChange event:', event)
-        try {
-          if (event === 'SIGNED_OUT' || !nextSession) {
-            clearAuthState()
-            perfilRef = null
-          } else if (event === 'TOKEN_REFRESHED') {
-            // Just update the session object, keep the existing profile
-            setSession(nextSession)
-            setUser(nextSession.user ?? null)
-            console.log('TOKEN_REFRESHED: session updated, profile kept intact.')
-          } else {
-            // SIGNED_IN, INITIAL_SESSION, USER_UPDATED, etc. — fetch/re-fetch profile
-            await applySession(nextSession, true)
+
+        void (async () => {
+          try {
+            if (event === 'SIGNED_OUT' || !nextSession) {
+              clearAuthState()
+              return
+            }
+
+            if (event === 'TOKEN_REFRESHED') {
+              setSession(nextSession)
+              setUser(nextSession.user ?? null)
+              lastAccessTokenRef.current = nextSession.access_token
+              return
+            }
+
+            const userId = nextSession.user.id
+            const hasCachedProfile =
+              profileUserIdRef.current === userId && perfilRef.current !== null
+
+            if (event === 'INITIAL_SESSION' && sessionHydratedRef.current && hasCachedProfile) {
+              setSession(nextSession)
+              setUser(nextSession.user ?? null)
+              lastAccessTokenRef.current = nextSession.access_token
+              return
+            }
+
+            if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && hasCachedProfile) {
+              setSession(nextSession)
+              setUser(nextSession.user ?? null)
+              lastAccessTokenRef.current = nextSession.access_token
+              return
+            }
+
+            const userChanged = profileUserIdRef.current !== null && profileUserIdRef.current !== userId
+            const forcePerfil = event === 'USER_UPDATED' || userChanged
+
+            sessionHydratedRef.current = true
+            await applySession(nextSession, { forcePerfil })
+          } catch {
+            if (!mounted) return
+          } finally {
+            finishLoading()
           }
-        } catch {
-          if (!mounted) return
-        } finally {
-          if (mounted) setLoading(false)
-        }
-      }
+        })()
+      },
     )
 
     return () => {
@@ -190,7 +254,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }
     if (!data.session) return { error: 'No se pudo crear la sesión.' }
-    const applied = await applySession(data.session)
+
+    const userChanged =
+      profileUserIdRef.current !== null &&
+      profileUserIdRef.current !== data.session.user.id
+
+    const applied = await applySession(data.session, { forcePerfil: userChanged })
     if (!applied) return { error: 'Tu usuario no tiene perfil/configuración de rol disponible.' }
     return { error: null }
   }
@@ -207,8 +276,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const refreshPerfil = async () => {
+    const userId = user?.id ?? session?.user?.id
+    if (!userId) return
+    fetchInFlightRef.current = null
+    await loadPerfilIfNeeded(userId, { force: true })
+  }
+
   return (
-    <AuthContext.Provider value={{ session, user, perfil, rol: perfil?.rol ?? null, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, user, perfil, rol: perfil?.rol ?? null, loading, signIn, signOut, refreshPerfil }}>
       {children}
     </AuthContext.Provider>
   )

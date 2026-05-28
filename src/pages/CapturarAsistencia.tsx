@@ -1,223 +1,331 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useToast } from '../context/ToastContext'
-import { useAuth } from '../context/AuthContext'
-import { supabase } from '../utils/supabase'
-
-interface AsigTutor { id: string; carrera: string; grupo: string; dia_semana: string; hora_inicio: string }
-interface Tutorado  { id: string; nombre_completo: string; numero_control: string | null }
-interface Sesion    { id: string; fecha_realizada: string; cerrada: boolean; actividad_nombre?: string }
+import RefreshButton from '../components/RefreshButton'
+import { gestionarAsistenciasTutor, gestionarGrupoTutor } from '../utils/gestionRpc'
+import { CALIF_LABELS, fechaLarga, diaMes } from '../utils/sesionesSemestre'
 
 type EstadoAsist = 'presente' | 'ausente' | 'justificado'
 
-const estadoColors: Record<EstadoAsist, { bg: string; border: string; text: string }> = {
-  presente:   { bg:'#f0fdf4', border:'#bbf7d0', text:'#166534' },
-  ausente:    { bg:'#fef2f2', border:'#fecaca', text:'#991b1b' },
-  justificado:{ bg:'#fffbeb', border:'#fde68a', text:'#92400e' },
+interface SesionCol {
+  id: string
+  numero_sesion: number
+  fecha_realizada: string
+  cerrada: boolean
+  actividad_nombre?: string
+}
+
+interface TutoradoRow {
+  tutorado_id: string
+  nombre_completo: string
+  numero_control: string | null
+}
+
+interface Celda {
+  tutorado_id: string
+  sesion_id: string
+  numero_sesion: number
+  estado: string
+  evidencia_estado?: string | null
+  evidencia_id?: string | null
+  evidencia_nombre?: string | null
+  calificacion?: number | null
+}
+
+const OPCIONES: { v: EstadoAsist; label: string; bg: string; border: string; text: string }[] = [
+  { v: 'presente',    label: 'Sí', bg: '#f0fdf4', border: '#86efac', text: '#15803d' },
+  { v: 'ausente',     label: 'No', bg: '#fef2f2', border: '#fca5a5', text: '#b91c1c' },
+  { v: 'justificado', label: 'J',  bg: '#fffbeb', border: '#fcd34d', text: '#b45309' },
+]
+
+const EV_INFO: Record<string, { label: string; bg: string; text: string }> = {
+  entregada:          { label: 'Entregada',   bg: '#eff6ff', text: '#1d4ed8' },
+  aceptada:           { label: 'Aceptada',    bg: '#f0fdf4', text: '#15803d' },
+  requiere_correccion:{ label: 'Correc.',     bg: '#fffbeb', text: '#b45309' },
+  rechazada:          { label: 'Rechazada',   bg: '#fef2f2', text: '#b91c1c' },
 }
 
 export default function CapturarAsistencia() {
-  const { perfil } = useAuth()
-  const { toast }  = useToast()
+  const { toast } = useToast()
 
-  const [grupos,     setGrupos]     = useState<AsigTutor[]>([])
-  const [grupoId,    setGrupoId]    = useState('')
-  const [sesiones,   setSesiones]   = useState<Sesion[]>([])
-  const [sesionId,   setSesionId]   = useState<'new'|string>('new')
-  const [tutorados,  setTutorados]  = useState<Tutorado[]>([])
-  const [asistencia, setAsistencia] = useState<Record<string,EstadoAsist>>({})
-  const [fechaNueva, setFechaNueva] = useState('')
-  const [actividades,setActividades]= useState<{id:string;nombre:string}[]>([])
-  const [actividadId,setActividadId]= useState('')
-  const [saving,     setSaving]     = useState(false)
-  const [periodoId,  setPeriodoId]  = useState('')
+  const [grupos, setGrupos] = useState<Array<{ id: string; carrera: string; grupo: string; dia_semana: string; hora_inicio: string; sesiones_planificadas?: boolean }>>([])
+  const [asignacionId, setAsignacionId] = useState('')
+  const [sesiones, setSesiones] = useState<SesionCol[]>([])
+  const [tutorados, setTutorados] = useState<TutoradoRow[]>([])
+  const [celdas, setCeldas] = useState<Record<string, EstadoAsist>>({})
+  const [metaCeldas, setMetaCeldas] = useState<Record<string, Celda>>({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const cellKey = (tid: string, sid: string) => `${tid}:${sid}`
+
+  const loadMatriz = useCallback(async (aid: string) => {
+    setLoading(true)
+    const res = await gestionarAsistenciasTutor('matriz_semestre', { asignacion_id: aid })
+    if (!res.ok) {
+      toast.error('Error al cargar matriz', res.error)
+      setLoading(false)
+      return
+    }
+    const ses = (res.data?.sesiones as SesionCol[]) ?? []
+    const tuts = (res.data?.tutorados as TutoradoRow[]) ?? []
+    const raw = (res.data?.celdas as Celda[]) ?? []
+    setSesiones(ses)
+    setTutorados(tuts)
+    const map: Record<string, EstadoAsist> = {}
+    const meta: Record<string, Celda> = {}
+    raw.forEach((c) => {
+      if (c.estado === 'presente' || c.estado === 'ausente' || c.estado === 'justificado') {
+        map[cellKey(c.tutorado_id, c.sesion_id)] = c.estado as EstadoAsist
+      }
+      meta[cellKey(c.tutorado_id, c.sesion_id)] = c
+    })
+    setCeldas(map)
+    setMetaCeldas(meta)
+    setLoading(false)
+  }, [toast])
+
+  async function loadGrupos() {
+    const res = await gestionarGrupoTutor('listar_grupos')
+    const lista = (res.data?.grupos as typeof grupos) ?? []
+    setGrupos(lista)
+    const aid = asignacionId || lista[0]?.id || ''
+    if (aid && !asignacionId) setAsignacionId(aid)
+    return { lista, aid: aid || lista[0]?.id || '' }
+  }
 
   useEffect(() => {
-    if (!perfil) return
-    supabase.from('periodos_escolares').select('id').eq('activo',true).single()
-      .then(({ data }) => {
-        if (data) {
-          const pid = (data as {id:string}).id
-          setPeriodoId(pid)
-          supabase.from('asignaciones_tutor')
-            .select('id,carrera,grupo,dia_semana,hora_inicio')
-            .eq('tutor_id',perfil.id).eq('periodo_id',pid).eq('activa',true)
-            .then(({ data: gs }) => {
-              const g = (gs ?? []) as AsigTutor[]
-              setGrupos(g); if(g.length>0) setGrupoId(g[0].id)
-            })
+    void (async () => {
+      const { aid } = await loadGrupos()
+      if (aid) await loadMatriz(aid)
+      else setLoading(false)
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (!asignacionId) return
+    void loadMatriz(asignacionId)
+  }, [asignacionId, loadMatriz])
+
+  function toggleEstado(tid: string, sid: string, est: EstadoAsist, cerrada: boolean) {
+    if (cerrada) return
+    const k = cellKey(tid, sid)
+    setCeldas((p) => {
+      const next = { ...p }
+      if (next[k] === est) {
+        delete next[k]
+      } else {
+        next[k] = est
+      }
+      return next
+    })
+  }
+
+  async function handleGuardar() {
+    if (!asignacionId) return
+    setSaving(true)
+    const registros: Array<{ tutorado_id: string; sesion_id: string; estado: string }> = []
+    tutorados.forEach((t) => {
+      sesiones.forEach((s) => {
+        if (!s.cerrada) {
+          const k = cellKey(t.tutorado_id, s.id)
+          if (celdas[k]) {
+            registros.push({ tutorado_id: t.tutorado_id, sesion_id: s.id, estado: celdas[k] })
+          }
         }
       })
-  }, [perfil])
-
-  useEffect(() => {
-    if (!grupoId || !periodoId) return
-    Promise.all([
-      supabase.from('sesiones').select('id,fecha_realizada,cerrada,actividades_pt(nombre)').eq('asignacion_id',grupoId).order('fecha_realizada',{ascending:false}),
-      supabase.from('asignaciones_tutorado').select('tutorado_id,perfiles(nombre_completo,numero_control)').eq('asignacion_id',grupoId).eq('activa',true),
-      supabase.from('actividades_pt').select('id,nombre').eq('estado','activa').order('fecha_programada'),
-    ]).then(([ses, tut, act]) => {
-      setSesiones((ses.data ?? []).map((s: Record<string,unknown>) => ({
-        id: s.id as string, fecha_realizada: s.fecha_realizada as string, cerrada: s.cerrada as boolean,
-        actividad_nombre: (s.actividades_pt as {nombre:string}|null)?.nombre,
-      })))
-      setTutorados((tut.data ?? []).map((r: Record<string,unknown>) => ({
-        id: (r.perfiles as {id?:string}|null)?.id ?? r.tutorado_id as string,
-        nombre_completo: (r.perfiles as {nombre_completo:string}|null)?.nombre_completo ?? '',
-        numero_control: (r.perfiles as {numero_control:string|null}|null)?.numero_control ?? null,
-      })))
-      setActividades((act.data ?? []) as {id:string;nombre:string}[])
-      const init: Record<string,EstadoAsist> = {}
-      tutorados.forEach(t => { init[t.id] = 'presente' })
-      setAsistencia(init)
-      setSesionId('new'); setFechaNueva('')
     })
-  }, [grupoId, periodoId])
-
-  useEffect(() => {
-    if (sesionId === 'new' || !sesionId) {
-      const init: Record<string,EstadoAsist> = {}
-      tutorados.forEach(t => { init[t.id] = 'presente' })
-      setAsistencia(init)
-    } else {
-      supabase.from('asistencias').select('tutorado_id,estado').eq('sesion_id',sesionId)
-        .then(({ data }) => {
-          const map: Record<string,EstadoAsist> = {}
-          tutorados.forEach(t => { map[t.id] = 'presente' })
-          ;(data ?? []).forEach((a: {tutorado_id:string;estado:EstadoAsist}) => { map[a.tutorado_id] = a.estado })
-          setAsistencia(map)
-        })
-    }
-  }, [sesionId, tutorados])
-
-  async function handleGuardar(e: FormEvent) {
-    e.preventDefault()
-    if (!perfil) return
-    setSaving(true)
-    let sid = sesionId
-    if (sesionId === 'new') {
-      if (!fechaNueva) { toast.warning('Ingresa la fecha de la sesión'); setSaving(false); return }
-      const { data: sesData, error: sesErr } = await supabase.from('sesiones').insert({
-        asignacion_id: grupoId,
-        actividad_pt_id: actividadId || null,
-        fecha_realizada: fechaNueva,
-        creado_por: perfil.id,
-      }).select('id').single()
-      if (sesErr) { toast.error('Error al crear sesión', sesErr.message); setSaving(false); return }
-      sid = (sesData as {id:string}).id
-    }
-    const rows = tutorados.map(t => ({
-      sesion_id: sid,
-      tutorado_id: t.id,
-      estado: asistencia[t.id] ?? 'presente',
-      capturado_por: perfil.id,
-    }))
-    const { error } = await supabase.from('asistencias').upsert(rows, { onConflict:'sesion_id,tutorado_id' })
-    if (error) toast.error('Error', error.message)
+    const res = await gestionarAsistenciasTutor('registrar_matriz', { asignacion_id: asignacionId, registros })
+    if (!res.ok) toast.error('Error al guardar', res.error)
     else {
-      toast.success('Asistencia guardada exitosamente')
-      if (sesionId === 'new') {
-        const { data: ses } = await supabase.from('sesiones').select('id,fecha_realizada,cerrada,actividades_pt(nombre)').eq('asignacion_id',grupoId).order('fecha_realizada',{ascending:false})
-        setSesiones((ses ?? []).map((s: Record<string,unknown>) => ({
-          id: s.id as string, fecha_realizada: s.fecha_realizada as string, cerrada: s.cerrada as boolean,
-          actividad_nombre: (s.actividades_pt as {nombre:string}|null)?.nombre,
-        })))
-        setSesionId(sid)
-      }
+      toast.success('Asistencia guardada correctamente')
+      await loadMatriz(asignacionId)
     }
     setSaving(false)
   }
 
-  const grupo = grupos.find(g=>g.id===grupoId)
+  const grupoActual = grupos.find((g) => g.id === asignacionId)
+  const sinPlanificar = grupoActual && !grupoActual.sesiones_planificadas
+
+  const marcados = Object.keys(celdas).length
+  const total = tutorados.length * sesiones.filter((s) => !s.cerrada).length
 
   return (
     <>
       <style>{`
-        .page-title{font-size:1.25rem;font-weight:800;color:#1e3a8a;margin:0}
-        .page-sub{font-size:0.82rem;color:#64748b;margin:0.15rem 0 0}
-        .ctrl-row{display:flex;align-items:center;gap:0.65rem;flex-wrap:wrap;margin-bottom:1rem}
-        .select-w{height:40px;border:1px solid #e2e8f0;border-radius:10px;padding:0 0.85rem;font-size:0.88rem;color:#0f172a;background:#fff;outline:none}
-        .select-w:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,0.12)}
-        .fi{height:40px;border:1px solid #e2e8f0;border-radius:10px;padding:0 0.85rem;font-size:0.88rem;color:#0f172a;background:#fff;outline:none}
-        .fi:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,0.12)}
-        .btn-primary{display:inline-flex;align-items:center;gap:0.45rem;height:40px;padding:0 1.1rem;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-size:0.85rem;font-weight:700;cursor:pointer;transition:background 0.18s}
-        .btn-primary:hover{background:#1e40af}
-        .btn-primary:disabled{opacity:0.5;cursor:not-allowed}
-        .asist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0.75rem;margin-top:1rem}
-        .asist-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:0.9rem 1rem}
-        .asist-name{font-size:0.9rem;font-weight:700;color:#0f172a;margin-bottom:0.5rem}
-        .asist-ctrl{font-size:0.74rem;color:#64748b;margin-bottom:0.65rem}
-        .estado-btns{display:flex;gap:0.4rem}
-        .estado-btn{flex:1;height:34px;border:1px solid;border-radius:8px;font-size:0.76rem;font-weight:700;cursor:pointer;transition:all 0.15s;background:transparent}
-        .estado-btn.active{font-weight:800}
-        .group-info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:0.65rem 1rem;font-size:0.84rem;color:#1e40af;font-weight:600;margin-bottom:1rem}
-        .empty-state{padding:2.5rem;text-align:center;color:#94a3b8;font-size:0.9rem}
+        .ca { --blue:#1d4ed8; --blue-s:#eff6ff; --border:#e8eef5; font-family:'Inter',sans-serif; }
+        .ca-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.25rem; flex-wrap:wrap; gap:0.75rem; }
+        .ca-title { font-size:1.25rem; font-weight:800; color:#0f172a; margin:0; }
+        .ca-sub { font-size:0.82rem; color:#64748b; margin:0.2rem 0 0; }
+        .ca-bar { display:flex; gap:0.65rem; flex-wrap:wrap; align-items:center; margin-bottom:1.1rem; }
+        .ca-select { height:40px; border:1px solid var(--border); border-radius:10px; padding:0 0.85rem 0 0.7rem; font-size:0.88rem; background:#fff; min-width:220px; font-weight:600; color:#0f172a; }
+        .ca-info-pill { background:linear-gradient(90deg,var(--blue-s),#f0fdf4); border:1px solid #bfdbfe; border-radius:10px; padding:0.6rem 1rem; font-size:0.82rem; color:#1e40af; font-weight:700; display:flex; align-items:center; gap:0.5rem; }
+        .ca-warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; border-radius:12px; padding:0.85rem 1rem; margin-bottom:1rem; font-size:0.86rem; font-weight:600; }
+        .ca-stats { display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem; }
+        .ca-stat { background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:0.45rem 0.85rem; font-size:0.78rem; color:#475569; font-weight:600; }
+        .ca-stat strong { color:#0f172a; }
+        .ca-wrap { overflow:auto; background:#fff; border:1px solid var(--border); border-radius:16px; box-shadow:0 2px 16px rgba(15,23,42,0.04); }
+        .ca-table { border-collapse:collapse; min-width:max-content; width:100%; }
+        .ca-table thead th { position:sticky; top:0; background:#f8fafc; z-index:2; padding:0.55rem 0.4rem; border-bottom:2px solid var(--border); font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:#64748b; text-align:center; min-width:96px; }
+        .ca-table thead th.sticky-col { left:0; z-index:3; text-align:left; min-width:220px; padding-left:1rem; }
+        .ca-table tbody td { border-bottom:1px solid #f1f5f9; padding:0.4rem 0.3rem; text-align:center; vertical-align:middle; }
+        .ca-table tbody td.sticky-col { position:sticky; left:0; background:#fff; z-index:1; text-align:left; padding-left:1rem; border-right:1px solid var(--border); }
+        .ca-table tbody tr:hover td { background:#f8faff; }
+        .ca-table tbody tr:hover td.sticky-col { background:#f8faff; }
+        .ca-name { font-weight:700; font-size:0.84rem; color:#0f172a; line-height:1.2; }
+        .ca-ctrl { font-size:0.7rem; color:#94a3b8; font-family:monospace; margin-top:1px; }
+        .ses-head-num { font-weight:900; font-size:0.82rem; color:#1e3a8a; }
+        .ses-head-date { font-size:0.62rem; color:#64748b; font-weight:600; margin-top:1px; }
+        .ses-head-act { font-size:0.6rem; color:#2563eb; font-weight:700; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:90px; }
+        .ses-head-closed { font-size:0.58rem; color:#94a3b8; margin-top:1px; }
+        .mini-btns { display:flex; gap:2px; justify-content:center; flex-wrap:nowrap; }
+        .mini-btn { width:26px; height:24px; border-radius:6px; border:1.5px solid; font-size:0.62rem; font-weight:900; cursor:pointer; padding:0; transition:all 0.1s; }
+        .mini-btn:disabled { opacity:0.3; cursor:not-allowed; }
+        .mini-btn.active { box-shadow:0 1px 4px rgba(0,0,0,0.15); }
+        .mini-btn.unmarked { background:#fff; border-color:#e2e8f0; color:#cbd5e1; }
+        .ev-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-top:3px; }
+        .ev-tag { display:inline-block; font-size:0.55rem; font-weight:800; padding:1px 4px; border-radius:4px; margin-top:2px; line-height:1.4; }
+        .btn-save { height:42px; padding:0 1.3rem; background:var(--blue); color:#fff; border:none; border-radius:10px; font-weight:700; cursor:pointer; font-size:0.88rem; }
+        .btn-save:disabled { opacity:0.5; cursor:not-allowed; }
+        .empty-msg { text-align:center; color:#94a3b8; padding:3rem 1rem; font-size:0.9rem; }
+        .loading-row td { text-align:center; padding:2rem; color:#94a3b8; font-size:0.88rem; }
       `}</style>
 
-      <div style={{ marginBottom:'1.25rem' }}>
-        <h1 className="page-title">Capturar Asistencia</h1>
-        <p className="page-sub">Registro de asistencia por sesión de tutoría</p>
-      </div>
+      <div className="ca">
+        <div className="ca-head">
+          <div>
+            <h1 className="ca-title">Capturar Asistencia</h1>
+            <p className="ca-sub">Matriz de 8 sesiones · Haz clic en Sí / No / J para marcar; clic de nuevo para desmarcar</p>
+          </div>
+          <RefreshButton
+            onClick={async () => {
+              setRefreshing(true)
+              await loadGrupos()
+              if (asignacionId) await loadMatriz(asignacionId)
+              setRefreshing(false)
+            }}
+            loading={refreshing}
+          />
+        </div>
 
-      <form onSubmit={handleGuardar}>
-        <div className="ctrl-row">
-          <select className="select-w" value={grupoId} onChange={e=>setGrupoId(e.target.value)}>
-            {grupos.map(g=><option key={g.id} value={g.id}>{g.carrera} — Gpo. {g.grupo} ({g.dia_semana})</option>)}
-          </select>
-          <select className="select-w" value={sesionId} onChange={e=>setSesionId(e.target.value)}>
-            <option value="new">+ Nueva sesión</option>
-            {sesiones.map(s=><option key={s.id} value={s.id}>{s.fecha_realizada} {s.actividad_nombre ? `— ${s.actividad_nombre}` : ''}{s.cerrada?' (cerrada)':''}</option>)}
-          </select>
-          {sesionId === 'new' && (
-            <>
-              <input className="fi" type="date" value={fechaNueva} onChange={e=>setFechaNueva(e.target.value)} required />
-              <select className="select-w" value={actividadId} onChange={e=>setActividadId(e.target.value)}>
-                <option value="">Sin actividad vinculada</option>
-                {actividades.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
-              </select>
-            </>
+        <div className="ca-bar">
+          {grupos.length > 0 && (
+            <select className="ca-select" value={asignacionId} onChange={(e) => setAsignacionId(e.target.value)}>
+              {grupos.map((g) => (
+                <option key={g.id} value={g.id}>{g.carrera} — Grupo {g.grupo}</option>
+              ))}
+            </select>
+          )}
+          {grupoActual && (
+            <div className="ca-info-pill">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              {grupoActual.carrera} · Grupo {grupoActual.grupo} · {grupoActual.dia_semana} {String(grupoActual.hora_inicio).slice(0, 5)}
+            </div>
+          )}
+          {tutorados.length > 0 && !sinPlanificar && (
+            <button type="button" className="btn-save" disabled={saving || loading} onClick={() => void handleGuardar()}>
+              {saving ? 'Guardando…' : 'Guardar asistencia'}
+            </button>
           )}
         </div>
 
-        {grupo && (
-          <div className="group-info">
-            {grupo.carrera} · Grupo {grupo.grupo} · {grupo.dia_semana} {grupo.hora_inicio} · {tutorados.length} tutorados
+        {sinPlanificar ? (
+          <div className="ca-warn">Este grupo no tiene 8 sesiones planificadas. Edítalo en Mis tutorados para agregar el calendario.</div>
+        ) : !loading && tutorados.length > 0 && (
+          <div className="ca-stats">
+            <div className="ca-stat">Tutorados: <strong>{tutorados.length}</strong></div>
+            <div className="ca-stat">Sesiones: <strong>{sesiones.length}</strong></div>
+            <div className="ca-stat">Celdas marcadas: <strong>{marcados}</strong> / {total}</div>
           </div>
         )}
 
-        {tutorados.length === 0
-          ? <div className="empty-state">No hay tutorados asignados a este grupo</div>
-          : (
-          <>
-            <div className="asist-grid">
-              {tutorados.map(t => {
-                const est = asistencia[t.id] ?? 'presente'
-                return (
-                  <div key={t.id} className="asist-card">
-                    <div className="asist-name">{t.nombre_completo}</div>
-                    <div className="asist-ctrl">{t.numero_control ?? 'Sin control'}</div>
-                    <div className="estado-btns">
-                      {(['presente','ausente','justificado'] as EstadoAsist[]).map(e => (
-                        <button key={e} type="button"
-                          className={`estado-btn${est===e?' active':''}`}
-                          style={{ borderColor: estadoColors[e].border, color: est===e?estadoColors[e].text:'#64748b', background: est===e?estadoColors[e].bg:'transparent' }}
-                          onClick={()=>setAsistencia(p=>({...p,[t.id]:e}))}
-                        >
-                          {e.charAt(0).toUpperCase()+e.slice(1,e==='justificado'?5:undefined)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'1.25rem' }}>
-              <button type="submit" className="btn-primary" disabled={saving}>
-                {saving ? 'Guardando…' : 'Guardar asistencia'}
-              </button>
-            </div>
-          </>
+        {loading ? (
+          <div className="empty-msg">Cargando matriz…</div>
+        ) : sesiones.length === 0 ? (
+          <div className="empty-msg">Sin sesiones planificadas para este grupo</div>
+        ) : tutorados.length === 0 ? (
+          <div className="empty-msg">Sin tutorados asignados a este grupo</div>
+        ) : (
+          <div className="ca-wrap">
+            <table className="ca-table">
+              <thead>
+                <tr>
+                  <th className="sticky-col">Tutorado</th>
+                  {sesiones.map((s) => {
+                    const dm = diaMes(s.fecha_realizada)
+                    return (
+                      <th key={s.id} title={fechaLarga(s.fecha_realizada)}>
+                        <div className="ses-head-num">S{s.numero_sesion}</div>
+                        <div className="ses-head-date">{dm.dia} {dm.mes.slice(0, 3)}</div>
+                        {s.actividad_nombre && (
+                          <div className="ses-head-act" title={s.actividad_nombre}>{s.actividad_nombre.slice(0, 14)}{s.actividad_nombre.length > 14 ? '…' : ''}</div>
+                        )}
+                        {s.cerrada && <div className="ses-head-closed">Cerrada</div>}
+                      </th>
+                    )
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {tutorados.map((t) => (
+                  <tr key={t.tutorado_id}>
+                    <td className="sticky-col">
+                      <div className="ca-name">{t.nombre_completo}</div>
+                      <div className="ca-ctrl">{t.numero_control}</div>
+                    </td>
+                    {sesiones.map((s) => {
+                      const k = cellKey(t.tutorado_id, s.id)
+                      const est = celdas[k]
+                      const meta = metaCeldas[k]
+                      const ev = meta?.evidencia_estado
+                      const evInfo = ev ? EV_INFO[ev] : null
+                      return (
+                        <td key={s.id}>
+                          <div className="mini-btns">
+                            {OPCIONES.map((o) => {
+                              const active = est === o.v
+                              return (
+                                <button
+                                  key={o.v}
+                                  type="button"
+                                  title={`${o.v}${s.cerrada ? ' (cerrada)' : ''}`}
+                                  className={`mini-btn${active ? ' active' : ''}`}
+                                  disabled={s.cerrada}
+                                  style={{
+                                    borderColor: active ? o.border : '#e2e8f0',
+                                    color: active ? o.text : '#cbd5e1',
+                                    background: active ? o.bg : '#fff',
+                                  }}
+                                  onClick={() => toggleEstado(t.tutorado_id, s.id, o.v, s.cerrada)}
+                                >
+                                  {o.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                          {s.actividad_nombre && (
+                            evInfo ? (
+                              <div
+                                className="ev-tag"
+                                style={{ background: evInfo.bg, color: evInfo.text }}
+                                title={meta?.calificacion ? `${CALIF_LABELS[meta.calificacion]}` : ev ?? ''}
+                              >
+                                {ev === 'aceptada' && meta?.calificacion ? CALIF_LABELS[meta.calificacion] : evInfo.label}
+                              </div>
+                            ) : (
+                              <div className="ev-tag" style={{ background: '#f8fafc', color: '#cbd5e1' }}>—</div>
+                            )
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </form>
+      </div>
     </>
   )
 }

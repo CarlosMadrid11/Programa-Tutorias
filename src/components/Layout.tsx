@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import ToastContainer from './ToastContainer'
+import CambiarPasswordModal from './CambiarPasswordModal'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../utils/supabase'
 
@@ -16,7 +17,7 @@ const menuIcon = (
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [periodo, setPeriodo]         = useState('')
-  const { session, perfil, loading }  = useAuth()
+  const { session, perfil, loading, refreshPerfil } = useAuth()
   const navigate                      = useNavigate()
 
   useEffect(() => {
@@ -35,8 +36,14 @@ export default function Layout() {
 
   const initial = perfil?.nombre_completo?.charAt(0)?.toUpperCase() ?? '?'
 
+  const requiereCambioPassword = Boolean(perfil?.primer_acceso)
+
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'Inter','Segoe UI',sans-serif" }}>
+      <CambiarPasswordModal
+        open={requiereCambioPassword}
+        onSuccess={() => void refreshPerfil()}
+      />
       <style>{`
         * { box-sizing: border-box; }
         .layout-main { min-height: calc(100vh - 64px); padding: 1.5rem; max-width: 1280px; margin: 0 auto; }

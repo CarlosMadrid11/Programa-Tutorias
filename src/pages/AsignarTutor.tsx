@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react'
 import { useToast } from '../context/ToastContext'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../utils/supabase'
+import RefreshButton from '../components/RefreshButton'
 
 interface Tutor   { id: string; nombre_completo: string; departamento: string | null }
 interface Periodo { id: string; nombre: string }
@@ -24,6 +25,8 @@ export default function AsignarTutor() {
   const [modal,     setModal]     = useState(false)
   const [saving,    setSaving]    = useState(false)
   const [form,      setForm]      = useState(empty)
+  const [refreshTick, setRefreshTick] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -50,7 +53,13 @@ export default function AsignarTutor() {
         }))
         setAsigs(rows)
       })
-  }, [periodoId])
+  }, [periodoId, refreshTick])
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    setRefreshTick((t) => t + 1)
+    setTimeout(() => setRefreshing(false), 400)
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -133,6 +142,7 @@ export default function AsignarTutor() {
               {periodos.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
             </select>
           )}
+          <RefreshButton onClick={handleRefresh} loading={refreshing} />
           <button className="btn-primary" onClick={()=>{setForm(empty);setModal(true)}}>{addIcon} Asignar tutor</button>
         </div>
       </div>
